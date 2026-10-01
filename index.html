@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Вязаный город</title>
+<title>Вязаный ковёр</title>
 <link href="https://fonts.googleapis.com/css2?family=Comfortaa:wght@500;700&display=swap" rel="stylesheet">
 <style>
   html,body{margin:0;height:100%;overflow:hidden;background:#efe4d2;font-family:Comfortaa,system-ui,sans-serif;color:#5a4636}
@@ -13,13 +13,18 @@
   #hint{font-size:14px;opacity:.85;text-align:center;flex:1}
   button{pointer-events:auto;font:inherit;font-weight:700;font-size:14px;border:2px dashed #b39a80;background:#f8f0e3;color:#5a4636;border-radius:999px;padding:8px 16px;cursor:pointer;white-space:nowrap}
   button:hover{background:#fff7ea}
-  @media (max-width:600px){h1{font-size:16px}#hint{display:none}}
+  #pick{display:flex;gap:6px;flex-wrap:wrap;justify-content:center}
+  #pick button{padding:6px 12px;font-size:13px}
+  #pick button.on{background:#5a4636;color:#f8f0e3;border:2px solid #5a4636}
+  @media (max-width:900px){#ui{flex-wrap:wrap}#hint{display:none}#pick{order:3;width:100%}}
+  @media (max-width:600px){h1{font-size:16px}#ui{padding:10px 12px;gap:8px}}
 </style>
 </head>
 <body>
 <canvas id="c"></canvas>
 <div id="ui">
-  <h1>Вязаный город</h1>
+  <h1>Вязаный ковёр</h1>
+  <div id="pick"></div>
   <div id="hint"></div>
   <button id="reset">Распустить</button>
 </div>
@@ -49,14 +54,32 @@ function rng(seed) {
   };
 }
 
-// ---------- Схема города ----------
-// Слои: 0 — небо, 1 — дальние дома и облака, 2 — ближние дома и земля, 3 — окна и кайма, 4 — деревья, луна и звёзды.
-// При N цветах слой L вяжется цветом active[min(L, N-1)].
+// ---------- Схемы картинок ----------
+// В каждой схеме пять слоёв (0–4). При N цветах слой L вяжется цветом active[min(L, N-1)]:
+// с одним цветом полотно однотонное, с каждым новым цветом проявляются новые детали.
 const COLS = 64, ROWS = 44, N = COLS * ROWS;
-const G = [...Array(ROWS)].map(() => new Uint8Array(COLS));
-(function buildCity() {
+function makePattern(draw) {
+  const g = [...Array(ROWS)].map(() => new Uint8Array(COLS));
+  const set = (r, c, v) => { if (r >= 0 && r < ROWS && c >= 0 && c < COLS) g[r][c] = v; };
+  const fill = (r1, c1, r2, c2, v) => { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) set(r, c, v); };
+  const ellipse = (rc, cc, ry, rx, v) => {
+    for (let r = Math.floor(rc - ry); r <= rc + ry; r++) for (let c = Math.floor(cc - rx); c <= cc + rx; c++)
+      if (((r - rc) / ry) ** 2 + ((c - cc) / rx) ** 2 <= 1) set(r, c, v);
+  };
+  const cloud = (r0, c0, w) => {
+    for (let r = -2; r <= 1; r++) for (let c = -w; c <= w; c++)
+      if ((c / w) ** 2 + ((r + .5) / 2) ** 2 < 1 - (r === -2 ? .5 : 0) * Math.abs(c / w)) set(r0 + r, c0 + c, 1);
+  };
+  draw({ set, fill, ellipse, cloud });
+  // кайма
+  for (let x = 0; x < COLS; x++) { set(0, x, 3); set(ROWS - 1, x, 3); }
+  for (let y = 0; y < ROWS; y++) { set(y, 0, 3); set(y, COLS - 1, 3); }
+  return g;
+}
+
+// Город. Слои: 0 — небо, 1 — дальние дома и облака, 2 — ближние дома и земля, 3 — окна и кайма, 4 — деревья, луна и звёзды.
+const city = makePattern(({ set, cloud }) => {
   const R = rng(11);
-  const set = (r, c, v) => { if (r >= 0 && r < ROWS && c >= 0 && c < COLS) G[r][c] = v; };
   const ground = ROWS - 5;
 
   // луна-полумесяц
@@ -67,10 +90,6 @@ const G = [...Array(ROWS)].map(() => new Uint8Array(COLS));
   // звёзды
   [[4, 8], [7, 18], [3, 27], [10, 36], [5, 42], [12, 6], [13, 58], [3, 60], [9, 24]].forEach(([r, c]) => set(r, c, 4));
   // облака
-  const cloud = (r0, c0, w) => {
-    for (let r = -2; r <= 1; r++) for (let c = -w; c <= w; c++)
-      if ((c / w) ** 2 + ((r + .5) / 2) ** 2 < 1 - (r === -2 ? .5 : 0) * Math.abs(c / w)) set(r0 + r, c0 + c, 1);
-  };
   cloud(6, 12, 6); cloud(12, 40, 5); cloud(4, 33, 3);
 
   // дальние дома
@@ -105,10 +124,87 @@ const G = [...Array(ROWS)].map(() => new Uint8Array(COLS));
   // земля и разметка
   for (let y = ground; y < ROWS; y++) for (let x = 0; x < COLS; x++) set(y, x, 2);
   for (let x = 2; x < COLS - 2; x += 5) { set(ground + 2, x, 3); set(ground + 2, x + 1, 3); }
-  // кайма
-  for (let x = 0; x < COLS; x++) { set(0, x, 3); set(ROWS - 1, x, 3); }
-  for (let y = 0; y < ROWS; y++) { set(y, 0, 3); set(y, COLS - 1, 3); }
-})();
+});
+
+// Рабочий стол. Слои: 0 — стена, 1 — столешница, стикеры и часы, 2 — монитор, клавиатура, кружка, стакан, рамка,
+// 3 — экран, клавиши, фото, стрелки часов и кайма, 4 — код на экране, пар, сердечко, карандаши, картинка на фото.
+const desk = makePattern(({ set, fill, ellipse }) => {
+  const top = 33;
+  fill(top, 0, ROWS - 1, COLS - 1, 1);
+  fill(top, 0, top, COLS - 1, 2);
+  // стикеры на стене
+  fill(4, 4, 10, 11, 1); fill(6, 5, 6, 10, 3); fill(8, 5, 8, 8, 3);
+  fill(12, 6, 17, 12, 1); fill(14, 7, 14, 11, 3);
+  // часы
+  ellipse(9, 54, 4.6, 4.6, 1); ellipse(9, 54, 3.4, 3.4, 0);
+  fill(6, 54, 9, 54, 3); fill(9, 55, 9, 56, 3);
+  // монитор
+  fill(4, 16, 24, 43, 2);
+  fill(6, 18, 22, 41, 3);
+  [[8, 20, 30], [10, 22, 34], [12, 22, 28], [14, 24, 38], [16, 24, 31], [18, 22, 35], [20, 20, 26]]
+    .forEach(([r, a, b]) => fill(r, a, r, b, 4));
+  fill(25, 28, 29, 31, 2);
+  fill(30, 23, 31, 36, 2);
+  // клавиатура
+  fill(35, 13, 41, 46, 2);
+  for (let c = 15; c <= 44; c += 2) { set(36, c, 3); set(38, c, 3); }
+  fill(40, 22, 40, 37, 3);
+  // мышка
+  ellipse(38, 51.5, 2.8, 1.8, 2); set(36, 51, 3); set(37, 51, 3);
+  // кружка с паром и сердечком
+  fill(24, 4, 33, 10, 2);
+  set(26, 11, 2); set(30, 11, 2); fill(26, 12, 30, 12, 2);
+  set(27, 6, 4); set(27, 8, 4); fill(28, 6, 28, 8, 4); set(29, 7, 4);
+  [[18, 6], [19, 5], [20, 6], [21, 5], [17, 9], [18, 8], [19, 9], [20, 8]].forEach(([r, c]) => set(r, c, 4));
+  // стакан с карандашами
+  fill(27, 45, 33, 48, 2);
+  fill(22, 46, 26, 46, 4); fill(23, 47, 26, 47, 3); fill(21, 48, 26, 48, 4);
+  // фото в рамке
+  fill(19, 51, 33, 61, 2);
+  fill(21, 53, 31, 59, 3);
+  ellipse(23.5, 57, 1.5, 1.5, 4);
+  fill(29, 53, 31, 59, 4); fill(28, 54, 28, 56, 4); set(27, 55, 4);
+});
+
+// Пейзаж. Слои: 0 — небо, 1 — дальние горы и облака, 2 — холмы и луг, 3 — снег на вершинах, озеро, птицы и кайма,
+// 4 — солнце, ёлки, блики на воде и цветы.
+const landscape = makePattern(({ set, fill, ellipse, cloud }) => {
+  const R = rng(5);
+  ellipse(9, 13, 4.5, 4.5, 4);
+  cloud(7, 30, 5); cloud(12, 52, 6); cloud(4, 46, 3);
+  // горы со снежными шапками
+  const peaks = [[3, 15], [16, 10], [29, 16], [42, 9], [55, 14], [66, 17]];
+  for (let c = 0; c < COLS; c++) {
+    let h = ROWS, pk = 0;
+    for (const [pc, pr] of peaks) { const v = pr + Math.abs(c - pc) * 1.25; if (v < h) { h = v; pk = pr; } }
+    for (let r = Math.ceil(h); r < ROWS; r++) set(r, c, r <= pk + 3 ? 3 : 1);
+  }
+  // холмы
+  const hill = c => Math.round(30 + 1.5 * Math.sin(c / 6) + Math.sin(c / 2.7 + 1));
+  for (let c = 0; c < COLS; c++) fill(hill(c), c, ROWS - 1, c, 2);
+  // птицы
+  [[13, 22], [11, 25], [14, 27]].forEach(([r, c]) => { set(r, c, 3); set(r - 1, c - 1, 3); set(r - 1, c + 1, 3); });
+  // озеро с бликами
+  const inLake = (r, c) => ((r - 37) / 3.6) ** 2 + ((c - 33) / 13) ** 2 <= 1;
+  ellipse(37, 33, 3.6, 13, 3);
+  fill(36, 27, 36, 30, 4); fill(38, 35, 38, 39, 4);
+  // цветы на лугу
+  for (let r = 34; r < ROWS - 1; r++) for (let c = 1; c < COLS - 1; c++)
+    if (!inLake(r, c) && R() < .07) set(r, c, 4);
+  // ёлки
+  [5, 13, 51, 58].forEach(x => {
+    const base = hill(x) + 5;
+    set(base, x, 3); set(base - 1, x, 3);
+    [0, 1, 2, 1, 2, 3].forEach((w, i) => fill(base - 7 + i, x - w, base - 7 + i, x + w, 4));
+  });
+});
+
+const PATTERNS = [
+  { name: 'Город', grid: city },
+  { name: 'Рабочий стол', grid: desk },
+  { name: 'Пейзаж', grid: landscape },
+];
+let G = PATTERNS[0].grid;
 
 // ---------- Порядок вязания (снизу вверх, змейкой, как ряды на спицах) ----------
 function pos(k) {
@@ -197,6 +293,22 @@ document.getElementById('reset').onclick = () => {
   unravel = true; active = []; anim.clear(); updateHint();
 };
 
+// выбор картинки: уже связанная часть перевязывается волной под новую схему
+const pickEl = document.getElementById('pick');
+PATTERNS.forEach((p, i) => {
+  const btn = document.createElement('button');
+  btn.textContent = p.name;
+  btn.classList.toggle('on', i === 0);
+  btn.onclick = () => choosePattern(i);
+  pickEl.appendChild(btn);
+});
+function choosePattern(i) {
+  if (unravel || G === PATTERNS[i].grid) return;
+  G = PATTERNS[i].grid;
+  [...pickEl.children].forEach((b, j) => b.classList.toggle('on', j === i));
+  repaint(performance.now());
+}
+
 const hintEl = document.getElementById('hint');
 function updateHint() {
   const n = active.length;
@@ -204,7 +316,7 @@ function updateHint() {
     unravel ? 'Распускаем…' :
     k >= N && n ? (n < YARNS.length ? 'Ковёр готов! Добавь ещё цвет — узор станет богаче' : 'Ковёр готов — все пять цветов в деле!') :
     n === 0 ? (k ? 'Пауза. Нажми на клубок, чтобы продолжить' : 'Нажми на клубок, чтобы начать вязать') :
-    n === 1 ? 'Однотонное полотно. Добавь второй клубок — появится город' :
+    n === 1 ? 'Однотонное полотно. Добавь второй клубок — появится рисунок' :
     n < YARNS.length ? 'Добавь ещё цвет — появятся новые детали' : 'Все пять цветов в деле!';
 }
 updateHint();
@@ -263,7 +375,7 @@ function layout() {
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
   pat = bgPattern(ctx);
   const zone = Math.min(Math.max(H * .26, 120), 200);
-  const top = 64, fringe = 22;
+  const top = document.getElementById('ui').offsetHeight + 4, fringe = 22;
   const availW = W - 48, availH = H - top - zone - fringe * 2;
   const s = Math.min(availW / buf.width, availH / buf.height);
   L.s = s; L.w = buf.width * s; L.h = buf.height * s;
