@@ -57,10 +57,11 @@ function rng(seed) {
 // ---------- Схемы картинок ----------
 // В каждой схеме пять слоёв (0–4). При N цветах слой L вяжется цветом active[min(L, N-1)]:
 // с одним цветом полотно однотонное, с каждым новым цветом проявляются новые детали.
-const COLS = 64, ROWS = 44, N = COLS * ROWS;
+// Схемы рисуются в базовой сетке BC×BR, а вяжутся в более мелкой сетке COLS×ROWS (см. ниже).
+const BC = 64, BR = 44;
 function makePattern(draw) {
-  const g = [...Array(ROWS)].map(() => new Uint8Array(COLS));
-  const set = (r, c, v) => { if (r >= 0 && r < ROWS && c >= 0 && c < COLS) g[r][c] = v; };
+  const g = [...Array(BR)].map(() => new Uint8Array(BC));
+  const set = (r, c, v) => { if (r >= 0 && r < BR && c >= 0 && c < BC) g[r][c] = v; };
   const fill = (r1, c1, r2, c2, v) => { for (let r = r1; r <= r2; r++) for (let c = c1; c <= c2; c++) set(r, c, v); };
   const ellipse = (rc, cc, ry, rx, v) => {
     for (let r = Math.floor(rc - ry); r <= rc + ry; r++) for (let c = Math.floor(cc - rx); c <= cc + rx; c++)
@@ -71,19 +72,16 @@ function makePattern(draw) {
       if ((c / w) ** 2 + ((r + .5) / 2) ** 2 < 1 - (r === -2 ? .5 : 0) * Math.abs(c / w)) set(r0 + r, c0 + c, 1);
   };
   draw({ set, fill, ellipse, cloud });
-  // кайма
-  for (let x = 0; x < COLS; x++) { set(0, x, 3); set(ROWS - 1, x, 3); }
-  for (let y = 0; y < ROWS; y++) { set(y, 0, 3); set(y, COLS - 1, 3); }
   return g;
 }
 
 // Город. Слои: 0 — небо, 1 — дальние дома и облака, 2 — ближние дома и земля, 3 — окна и кайма, 4 — деревья, луна и звёзды.
 const city = makePattern(({ set, cloud }) => {
   const R = rng(11);
-  const ground = ROWS - 5;
+  const ground = BR - 5;
 
   // луна-полумесяц
-  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+  for (let r = 0; r < BR; r++) for (let c = 0; c < BC; c++) {
     const d1 = (c - 51) ** 2 + ((r - 8) * 1.25) ** 2, d2 = (c - 49) ** 2 + ((r - 7) * 1.25) ** 2;
     if (d1 <= 22 && d2 > 16) set(r, c, 4);
   }
@@ -94,7 +92,7 @@ const city = makePattern(({ set, cloud }) => {
 
   // дальние дома
   let c = 1;
-  while (c < COLS - 1) {
+  while (c < BC - 1) {
     const w = 3 + Math.floor(R() * 4), h = 12 + Math.floor(R() * 13);
     for (let x = c; x < c + w; x++) for (let y = ground - h; y < ground; y++) set(y, x, 1);
     if (R() < .35) { const m = c + Math.floor(w / 2); for (let i = 1; i <= 3; i++) set(ground - h - i, m, 1); }
@@ -102,9 +100,9 @@ const city = makePattern(({ set, cloud }) => {
   }
   // ближние дома с окнами
   c = 1;
-  while (c < COLS - 2) {
+  while (c < BC - 2) {
     const w = 5 + Math.floor(R() * 5), h = 7 + Math.floor(R() * 12), top = ground - h;
-    for (let x = c; x < c + w && x < COLS - 1; x++) for (let y = top; y < ground; y++) set(y, x, 2);
+    for (let x = c; x < c + w && x < BC - 1; x++) for (let y = top; y < ground; y++) set(y, x, 2);
     const roll = R();
     if (roll < .35) {
       for (let i = 1; i <= Math.ceil(w / 2); i++) for (let x = c + i - 1; x <= c + w - i; x++) set(top - i, x, 2);
@@ -122,16 +120,16 @@ const city = makePattern(({ set, cloud }) => {
     set(ground - 5, x, 4);
   });
   // земля и разметка
-  for (let y = ground; y < ROWS; y++) for (let x = 0; x < COLS; x++) set(y, x, 2);
-  for (let x = 2; x < COLS - 2; x += 5) { set(ground + 2, x, 3); set(ground + 2, x + 1, 3); }
+  for (let y = ground; y < BR; y++) for (let x = 0; x < BC; x++) set(y, x, 2);
+  for (let x = 2; x < BC - 2; x += 5) { set(ground + 2, x, 3); set(ground + 2, x + 1, 3); }
 });
 
 // Рабочий стол. Слои: 0 — стена, 1 — столешница, стикеры и часы, 2 — монитор, клавиатура, кружка, стакан, рамка,
 // 3 — экран, клавиши, фото, стрелки часов и кайма, 4 — код на экране, пар, сердечко, карандаши, картинка на фото.
 const desk = makePattern(({ set, fill, ellipse }) => {
   const top = 33;
-  fill(top, 0, ROWS - 1, COLS - 1, 1);
-  fill(top, 0, top, COLS - 1, 2);
+  fill(top, 0, BR - 1, BC - 1, 1);
+  fill(top, 0, top, BC - 1, 2);
   // стикеры на стене
   fill(4, 4, 10, 11, 1); fill(6, 5, 6, 10, 3); fill(8, 5, 8, 8, 3);
   fill(12, 6, 17, 12, 1); fill(14, 7, 14, 11, 3);
@@ -174,14 +172,14 @@ const landscape = makePattern(({ set, fill, ellipse, cloud }) => {
   cloud(7, 30, 5); cloud(12, 52, 6); cloud(4, 46, 3);
   // горы со снежными шапками
   const peaks = [[3, 15], [16, 10], [29, 16], [42, 9], [55, 14], [66, 17]];
-  for (let c = 0; c < COLS; c++) {
-    let h = ROWS, pk = 0;
+  for (let c = 0; c < BC; c++) {
+    let h = BR, pk = 0;
     for (const [pc, pr] of peaks) { const v = pr + Math.abs(c - pc) * 1.25; if (v < h) { h = v; pk = pr; } }
-    for (let r = Math.ceil(h); r < ROWS; r++) set(r, c, r <= pk + 3 ? 3 : 1);
+    for (let r = Math.ceil(h); r < BR; r++) set(r, c, r <= pk + 3 ? 3 : 1);
   }
   // холмы
   const hill = c => Math.round(30 + 1.5 * Math.sin(c / 6) + Math.sin(c / 2.7 + 1));
-  for (let c = 0; c < COLS; c++) fill(hill(c), c, ROWS - 1, c, 2);
+  for (let c = 0; c < BC; c++) fill(hill(c), c, BR - 1, c, 2);
   // птицы
   [[13, 22], [11, 25], [14, 27]].forEach(([r, c]) => { set(r, c, 3); set(r - 1, c - 1, 3); set(r - 1, c + 1, 3); });
   // озеро с бликами
@@ -189,7 +187,7 @@ const landscape = makePattern(({ set, fill, ellipse, cloud }) => {
   ellipse(37, 33, 3.6, 13, 3);
   fill(36, 27, 36, 30, 4); fill(38, 35, 38, 39, 4);
   // цветы на лугу
-  for (let r = 34; r < ROWS - 1; r++) for (let c = 1; c < COLS - 1; c++)
+  for (let r = 34; r < BR - 1; r++) for (let c = 1; c < BC - 1; c++)
     if (!inLake(r, c) && R() < .07) set(r, c, 4);
   // ёлки
   [5, 13, 51, 58].forEach(x => {
@@ -199,10 +197,16 @@ const landscape = makePattern(({ set, fill, ellipse, cloud }) => {
   });
 });
 
+// Мелкая сетка петель: каждая клетка схемы растягивается в SCALE раз, по краю — кайма в две петли.
+const SCALE = 1.5, COLS = Math.round(BC * SCALE), ROWS = Math.round(BR * SCALE), N = COLS * ROWS;
+function upscale(base) {
+  return [...Array(ROWS)].map((_, r) => Uint8Array.from({ length: COLS }, (_, c) =>
+    r < 2 || c < 2 || r >= ROWS - 2 || c >= COLS - 2 ? 3 : base[Math.floor(r / SCALE)][Math.floor(c / SCALE)]));
+}
 const PATTERNS = [
-  { name: 'Город', grid: city },
-  { name: 'Рабочий стол', grid: desk },
-  { name: 'Пейзаж', grid: landscape },
+  { name: 'Город', grid: upscale(city) },
+  { name: 'Рабочий стол', grid: upscale(desk) },
+  { name: 'Пейзаж', grid: upscale(landscape) },
 ];
 let G = PATTERNS[0].grid;
 
@@ -274,7 +278,7 @@ function repaint(now) {
     const t = target(i);
     if (t !== cellBall[i]) {
       const rb = Math.floor(i / COLS);
-      anim.set(i, { from: cellBall[i], to: t, start: now + rb * 28 + Math.random() * 60 });
+      anim.set(i, { from: cellBall[i], to: t, start: now + rb * 28 / SCALE + Math.random() * 60 });
     }
   }
 }
@@ -377,10 +381,10 @@ function layout() {
   const zone = Math.min(Math.max(H * .26, 120), 200);
   const top = document.getElementById('ui').offsetHeight + 4, fringe = 22;
   const availW = W - 48, availH = H - top - zone - fringe * 2;
-  const s = Math.min(availW / buf.width, availH / buf.height);
+  const s = Math.max(Math.min(availW / buf.width, availH / buf.height), .01);
   L.s = s; L.w = buf.width * s; L.h = buf.height * s;
   L.x = (W - L.w) / 2; L.y = top + fringe + (availH - L.h) / 2;
-  const gw = Math.min(W - 20, 860), r = Math.min(zone * .34, gw / 10 * .82);
+  const gw = Math.max(Math.min(W - 20, 860), 50), r = Math.max(Math.min(zone * .34, gw / 10 * .82), 4);
   balls.forEach((b, i) => { b.x = (W - gw) / 2 + gw * (i + .5) / YARNS.length; b.y = H - zone / 2 - 4; b.r = r; });
 }
 addEventListener('resize', layout);
@@ -409,7 +413,7 @@ function frame(now) {
 
   // вязание
   if (knitting) {
-    acc += dt * (70 + active.length * 35);
+    acc += dt * (70 + active.length * 35) * SCALE * SCALE;
     while (acc >= 1 && k < N) {
       const b = target(k);
       cellBall[k] = b; used[b]++; drawCell(k, b); k++; acc--;
@@ -420,7 +424,7 @@ function frame(now) {
 
   // распускание
   if (unravel) {
-    let n = Math.ceil(dt * 900);
+    let n = Math.ceil(dt * 900 * SCALE * SCALE);
     while (n-- > 0 && k > 0) { k--; drawCell(k, -1); cellBall[k] = -1; }
     if (k === 0) { unravel = false; used.fill(0); updateHint(); }
   }
@@ -466,7 +470,7 @@ function render(now, knitting) {
 
     // бахрома
     const fr = (r, dir) => {
-      for (let c = 1; c < COLS; c += 2) {
+      for (let c = 2; c < COLS - 1; c += 3) {
         const kk = kOf(r, c); if (kk >= k || cellBall[kk] < 0) continue;
         const x = L.x + (c + .5) * CW * L.s, y0 = dir > 0 ? L.y + L.h : L.y;
         ctx.strokeStyle = YARNS[cellBall[kk]].main;
